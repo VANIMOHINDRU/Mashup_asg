@@ -14,7 +14,6 @@ app = Flask(__name__)
 # --------------------------------------------------
 def create_mashup(singer, num_videos, duration):
 
-    # Clean previous files
     shutil.rmtree("audios", ignore_errors=True)
     os.makedirs("audios", exist_ok=True)
 
@@ -23,13 +22,17 @@ def create_mashup(singer, num_videos, duration):
     if os.path.exists("mashup.zip"):
         os.remove("mashup.zip")
 
-    # Download audio only + limit duration
+    def duration_filter(info, *, incomplete):
+        if info.get("duration") and info["duration"] > 300:
+            return "Video too long"
+        return None
+
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'audios/%(title)s.%(ext)s',
         'quiet': True,
         'noplaylist': True,
-        'match_filter': 'duration < 300'   # avoid 2 hour videos
+        'match_filter': duration_filter
     }
 
     with YoutubeDL(ydl_opts) as ydl:
@@ -43,15 +46,13 @@ def create_mashup(singer, num_videos, duration):
             audio = AudioSegment.from_file(path)
             merged += audio[:duration * 1000]
 
-    output_file = "mashup.mp3"
-    merged.export(output_file, format="mp3")
+    merged.export("mashup.mp3", format="mp3")
 
-    # Create zip
-    zip_name = "mashup.zip"
-    with zipfile.ZipFile(zip_name, 'w') as zipf:
-        zipf.write(output_file)
+    with zipfile.ZipFile("mashup.zip", 'w') as zipf:
+        zipf.write("mashup.mp3")
 
-    return zip_name
+    return "mashup.zip"
+
 
 
 # --------------------------------------------------
