@@ -3,6 +3,7 @@ import os
 import zipfile
 import shutil
 import base64
+import re
 from yt_dlp import YoutubeDL
 from pydub import AudioSegment
 
@@ -12,7 +13,15 @@ from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileT
 app = Flask(__name__)
 
 # --------------------------------------------------
-# CREATE MASHUP (UNCHANGED LOGIC)
+# EMAIL VALIDATION
+# --------------------------------------------------
+def is_valid_email(email):
+    pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+    return re.match(pattern, email)
+
+
+# --------------------------------------------------
+# CREATE MASHUP
 # --------------------------------------------------
 def create_mashup(singer, num_videos, duration):
 
@@ -24,6 +33,7 @@ def create_mashup(singer, num_videos, duration):
     if os.path.exists("mashup.zip"):
         os.remove("mashup.zip")
 
+    # Filter videos longer than 5 minutes
     def duration_filter(info, *, incomplete):
         if info.get("duration") and info["duration"] > 300:
             return "Video too long"
@@ -37,19 +47,23 @@ def create_mashup(singer, num_videos, duration):
         'match_filter': duration_filter
     }
 
+    # Download N videos
     with YoutubeDL(ydl_opts) as ydl:
         ydl.download([f"ytsearch{num_videos}:{singer} songs"])
 
     merged = AudioSegment.empty()
 
+    # Convert + cut + merge
     for file in os.listdir("audios"):
         if file.endswith((".webm", ".m4a", ".mp3")):
             path = os.path.join("audios", file)
             audio = AudioSegment.from_file(path)
             merged += audio[:duration * 1000]
 
+    # Export final mashup
     merged.export("mashup.mp3", format="mp3")
 
+    # Zip file
     with zipfile.ZipFile("mashup.zip", 'w') as zipf:
         zipf.write("mashup.mp3")
 
@@ -57,7 +71,7 @@ def create_mashup(singer, num_videos, duration):
 
 
 # --------------------------------------------------
-# SEND EMAIL (FIXED FOR RENDER)
+# SEND EMAIL
 # --------------------------------------------------
 def send_email(receiver, zip_file):
 
@@ -96,30 +110,42 @@ def send_email(receiver, zip_file):
 
 
 # --------------------------------------------------
-# ROUTE (UNCHANGED)
+# ROUTE
 # --------------------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def index():
 
     if request.method == "POST":
         try:
-            singer = request.form["singer"]
+            singer = request.form["singer"].strip()
             num_videos = int(request.form["videos"])
             duration = int(request.form["duration"])
-            email = request.form["email"]
+            email = request.form["email"].strip()
 
-            if num_videos < 3:
-                return "Minimum 3 videos required."
+            # ---------------------------
+            # ASSIGNMENT REQUIREMENTS
+            # ---------------------------
 
-            if duration < 15:
-                return "Minimum 15 seconds required."
+            if num_videos <= 10:
+                return "Number of videos must be greater than 10."
 
+            if duration <= 20:
+                return "Duration must be greater than 20 seconds."
+
+            if not is_valid_email(email):
+                return "Invalid email address."
+
+            # Create mashup
             zip_file = create_mashup(singer, num_videos, duration)
 
+            # Send email
             if send_email(email, zip_file):
                 return "Mashup created and email sent successfully!"
             else:
                 return "Mashup created, but email failed."
+
+        except ValueError:
+            return "Number of videos and duration must be integers."
 
         except Exception as e:
             return f"Error occurred: {str(e)}"
@@ -127,5 +153,8 @@ def index():
     return render_template("index.html")
 
 
+# --------------------------------------------------
+# MAIN
+# --------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
