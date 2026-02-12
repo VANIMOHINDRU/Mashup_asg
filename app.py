@@ -1,16 +1,18 @@
 from flask import Flask, render_template, request
 import os
 import zipfile
-import smtplib
 import shutil
-from email.message import EmailMessage
+import base64
 from yt_dlp import YoutubeDL
 from pydub import AudioSegment
+
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
 
 app = Flask(__name__)
 
 # --------------------------------------------------
-# CREATE MASHUP
+# CREATE MASHUP (UNCHANGED LOGIC)
 # --------------------------------------------------
 def create_mashup(singer, num_videos, duration):
 
@@ -54,33 +56,37 @@ def create_mashup(singer, num_videos, duration):
     return "mashup.zip"
 
 
-
 # --------------------------------------------------
-# SEND EMAIL
+# SEND EMAIL (FIXED FOR RENDER)
 # --------------------------------------------------
 def send_email(receiver, zip_file):
 
-    sender = os.environ.get("EMAIL_SENDER")
-    password = os.environ.get("EMAIL_PASSWORD")
-
     try:
-        msg = EmailMessage()
-        msg['Subject'] = "Your Mashup File"
-        msg['From'] = sender
-        msg['To'] = receiver
-        msg.set_content("Please find your mashup attached.")
+        api_key = os.environ.get("SENDGRID_API_KEY")
+        sender = os.environ.get("EMAIL_SENDER")
 
-        with open(zip_file, 'rb') as f:
-            msg.add_attachment(
-                f.read(),
-                maintype='application',
-                subtype='zip',
-                filename=zip_file
-            )
+        message = Mail(
+            from_email=sender,
+            to_emails=receiver,
+            subject="Your Mashup File",
+            html_content="<strong>Please find your mashup attached.</strong>"
+        )
 
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(sender, password)
-            smtp.send_message(msg)
+        with open(zip_file, "rb") as f:
+            data = f.read()
+            encoded_file = base64.b64encode(data).decode()
+
+        attachment = Attachment(
+            FileContent(encoded_file),
+            FileName("mashup.zip"),
+            FileType("application/zip"),
+            Disposition("attachment")
+        )
+
+        message.attachment = attachment
+
+        sg = SendGridAPIClient(api_key)
+        sg.send(message)
 
         return True
 
@@ -90,7 +96,7 @@ def send_email(receiver, zip_file):
 
 
 # --------------------------------------------------
-# ROUTE
+# ROUTE (UNCHANGED)
 # --------------------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -102,7 +108,6 @@ def index():
             duration = int(request.form["duration"])
             email = request.form["email"]
 
-            # Cloud-safe validation
             if num_videos < 3:
                 return "Minimum 3 videos required."
 
