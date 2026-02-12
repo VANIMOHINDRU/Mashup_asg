@@ -7,11 +7,6 @@ from email.message import EmailMessage
 from yt_dlp import YoutubeDL
 from pydub import AudioSegment
 
-# --------------------------------------------------
-# FORCE FFMPEG PATH
-# --------------------------------------------------
-
-
 app = Flask(__name__)
 
 # --------------------------------------------------
@@ -19,21 +14,22 @@ app = Flask(__name__)
 # --------------------------------------------------
 def create_mashup(singer, num_videos, duration):
 
-    # Remove old files
+    # Clean previous files
     shutil.rmtree("audios", ignore_errors=True)
+    os.makedirs("audios", exist_ok=True)
+
     if os.path.exists("mashup.mp3"):
         os.remove("mashup.mp3")
     if os.path.exists("mashup.zip"):
         os.remove("mashup.zip")
 
-    os.makedirs("audios", exist_ok=True)
-
-    # Download audio only
+    # Download audio only + limit duration
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'audios/%(title)s.%(ext)s',
         'quiet': True,
-        'noplaylist': True
+        'noplaylist': True,
+        'match_filter': 'duration < 300'   # avoid 2 hour videos
     }
 
     with YoutubeDL(ydl_opts) as ydl:
@@ -45,8 +41,7 @@ def create_mashup(singer, num_videos, duration):
         if file.endswith((".webm", ".m4a", ".mp3")):
             path = os.path.join("audios", file)
             audio = AudioSegment.from_file(path)
-            trimmed = audio[:duration * 1000]
-            merged += trimmed
+            merged += audio[:duration * 1000]
 
     output_file = "mashup.mp3"
     merged.export(output_file, format="mp3")
@@ -66,7 +61,6 @@ def send_email(receiver, zip_file):
 
     sender = os.environ.get("EMAIL_SENDER")
     password = os.environ.get("EMAIL_PASSWORD")
-      # Use Gmail App Password
 
     try:
         msg = EmailMessage()
@@ -87,7 +81,6 @@ def send_email(receiver, zip_file):
             smtp.login(sender, password)
             smtp.send_message(msg)
 
-        print("Email sent successfully!")
         return True
 
     except Exception as e:
@@ -108,19 +101,19 @@ def index():
             duration = int(request.form["duration"])
             email = request.form["email"]
 
-            # Validation
-            if num_videos <= 10:
-                return "Number of videos must be greater than 10."
+            # Cloud-safe validation
+            if num_videos < 3:
+                return "Minimum 3 videos required."
 
-            if duration <= 20:
-                return "Duration must be greater than 20 seconds."
+            if duration < 15:
+                return "Minimum 15 seconds required."
 
             zip_file = create_mashup(singer, num_videos, duration)
 
             if send_email(email, zip_file):
                 return "Mashup created and email sent successfully!"
             else:
-                return "Mashup created, but email failed. Check terminal."
+                return "Mashup created, but email failed."
 
         except Exception as e:
             return f"Error occurred: {str(e)}"
@@ -128,8 +121,5 @@ def index():
     return render_template("index.html")
 
 
-# --------------------------------------------------
-# RUN
-# --------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
