@@ -63,10 +63,11 @@ Email validation included
 # Deployment
 
 The web application is deployed and accessible online.
-Example:
 
-https://your-app-name.onrender.com
+```bash
+https://mashup-asg.onrender.com/
 
+```
 # Technologies Used
 
 -Python
