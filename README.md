@@ -94,7 +94,7 @@ Parameter validation enforced
 
 ### Web App
 
-![Web app](screenshots/render.png)
+![Web app](sc/render.png)
 
 
-![Gmail](screenshots/mail.png)
+![Gmail](sc/mail.png)
