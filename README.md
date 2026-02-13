@@ -90,3 +90,11 @@ Run web app:
 -Exception handling for download and email errors
 Parameter validation enforced
 
+## 📷 Screenshots
+
+### Web App
+
+![Web app](screenshots/render.png)
+
+
+![Gmail](screenshots/mail.png)
